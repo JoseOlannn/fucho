@@ -139,53 +139,33 @@ with tab1:
                 goles_esperados_1 *= 0.60
                 goles_esperados_2 *= 0.50
             
-            max_goles = 7
-            probabilidades = {}
-            from scipy.stats import nbinom
-            
-            # Función para calcular probabilidad con Binomial Negativa
-            # VERSIÓN 2.0: Varianza calibrada empíricamente = 1.73 (antes: 1.40)
-            # Basado en análisis histórico: Var(goles_local)=3.148, mean=1.757 → ratio=1.791
-            def prob_goles(k, xg):
-                if xg <= 0.1: return 1.0 if k == 0 else 0.0
-                varianza = xg * 1.73  # MEJORADO: 1.73 en lugar de 1.40
-                p = xg / varianza
-                n = (xg * p) / (1 - p)
-                return nbinom.pmf(k, n, p)
-
-            for g1 in range(max_goles + 1):
-                for g2 in range(max_goles + 1):
-                    prob = prob_goles(g1, goles_esperados_1) * prob_goles(g2, goles_esperados_2)
-                    probabilidades[f"{g1} - {g2}"] = prob
-            
             # ============================================================
-            # PREDICCIÓN OFICIAL (La que debes apostar en Mercado Pago)
+            # PREDICCIÓN OFICIAL (Extraída directamente del Monte Carlo)
             # ============================================================
-            marcadores_top = sorted(probabilidades.items(), key=lambda x: x[1], reverse=True)
+            marcador_oficial = result['official_score']
+            prob_oficial = result['official_prob'] / 100.0
+            
+            g1_oficial, g2_oficial = map(int, marcador_oficial.split('-'))
             
             prob_t1_win = result['team1_win']
             prob_draw = result['draw']
             prob_t2_win = result['team2_win']
-            
-            # Utilizar el motor centralizado de predicción de marcador
-            from model import get_expected_score
-            g1_oficial, g2_oficial = get_expected_score(result)
-            
-            marcador_oficial = f"{g1_oficial} - {g2_oficial}"
-            prob_oficial = probabilidades.get(marcador_oficial, 0)
 
-            # Confianza basada en la probabilidad de victoria del favorito
+            # Confianza realista basada en la probabilidad de victoria del favorito (Punto 6)
             max_win = max(result['team1_win'], result['team2_win'], result['draw'])
             
-            if max_win >= 55:
-                nivel_confianza = "ALTA"
-                texto_confianza = f"Favorito claro ({max_win:.0f}% de victoria). Apuesta sólida."
+            if max_win >= 65:
+                nivel_confianza = "STRONG LEAN 🟢"
+                texto_confianza = f"Claro favorito ({max_win:.0f}%). Baja varianza esperada."
+            elif max_win >= 50:
+                nivel_confianza = "SLIGHT LEAN 🟡"
+                texto_confianza = f"Ligera ventaja ({max_win:.0f}%). Partido competido."
             elif max_win >= 40:
-                nivel_confianza = "MEDIA"
-                texto_confianza = f"Ligera ventaja ({max_win:.0f}%). Apuesta con precaución."
+                nivel_confianza = "HIGH VARIANCE 🟠"
+                texto_confianza = f"Partido caótico ({max_win:.0f}%). Cualquier cosa puede pasar."
             else:
-                nivel_confianza = "BAJA"
-                texto_confianza = f"Partido muy parejo ({max_win:.0f}%). Alto riesgo."
+                nivel_confianza = "NO BET / RISKY 🔴"
+                texto_confianza = f"Extremadamente incierto ({max_win:.0f}%). Riesgo altísimo."
             
             # Determinar ganador
             if g1_oficial > g2_oficial:
@@ -195,9 +175,8 @@ with tab1:
             else:
                 veredicto = "Empate"
             
-            # BTTS (Both Teams To Score / Ambos Anotan)
-            prob_btts_si = sum(p for score, p in probabilidades.items() 
-                             if all(int(x) > 0 for x in score.split(' - ')))
+            # BTTS (Both Teams To Score / Ambos Anotan) - Directo del Monte Carlo
+            prob_btts_si = result['btts'] / 100.0
             
             # Alerta dinámica de sorpresa
             alerta_sorpresa = ""
@@ -224,13 +203,12 @@ with tab1:
             # ============================================================
             st.subheader("Mercados de Apuestas")
             
-            # Over/Under 2.5
-            prob_under = sum(p for score, p in probabilidades.items() 
-                           if sum(int(x) for x in score.split(' - ')) < 3)
-            prob_over = 1 - prob_under
+            # Over/Under 2.5 - Directo del Monte Carlo
+            prob_over = result['over_25'] / 100.0
+            prob_under = 1.0 - prob_over
             
             # BTTS ya se calculó arriba para la alerta
-            prob_btts_no = 1 - prob_btts_si
+            prob_btts_no = 1.0 - prob_btts_si
             
             col_m1, col_m2 = st.columns(2)
             with col_m1:
@@ -249,19 +227,19 @@ with tab1:
             st.divider()
             
             # ============================================================
-            # DETALLE TÉCNICO (xG + Top 5)
+            # DETALLE TÉCNICO (xG + Top 3 Scenarios)
             # ============================================================
             st.subheader("Proyección de Marcadores (Detalle Técnico)")
             col_res1, col_res2 = st.columns(2)
             with col_res1:
-                st.write("**Goles Esperados (xG)**")
+                st.write("**Goles Esperados (xG Ajustado)**")
                 st.metric(label=traducir(team1), value=f"{goles_esperados_1:.2f}")
                 st.metric(label=traducir(team2), value=f"{goles_esperados_2:.2f}")
             with col_res2:
-                st.write("**Top 5 Probabilidades de Marcador:**")
-                for marcador, prob in marcadores_top[:5]:
-                    oficial_tag = " (Oficial)" if marcador == marcador_oficial else ""
-                    st.write(f"{marcador} -> **{prob*100:.1f}%**{oficial_tag}")
+                st.write("**Top 3 Escenarios Más Probables (Monte Carlo):**")
+                for marcador, prob in result['top_3_scenarios']:
+                    oficial_tag = " (Recomendado ⭐)" if marcador == marcador_oficial else ""
+                    st.write(f"**{marcador}** -> **{prob:.1f}%**{oficial_tag}")
 
 with tab2:
     st.subheader("Actualización de Base de Datos")
@@ -359,8 +337,7 @@ with tab4:
                                     ganador = "Empate"
                                 
                                 # Calcular marcador exacto usando motor centralizado
-                                from model import get_expected_score
-                                g1, g2 = get_expected_score(res)
+                                g1, g2 = map(int, res['official_score'].split('-'))
                                 mejor_marcador = f"{g1} - {g2}"
                                 
                                 st.write(f"**Proyección:** {ganador}")
@@ -424,19 +401,8 @@ with tab6:
                             r = predict_match(t1, t2)
                             xg1, xg2 = r['xg1'], r['xg2']
                             
-                            probabilidades = {}
-                            for g1 in range(8):
-                                for g2 in range(8):
-                                    prob = prob_goles(g1, xg1) * prob_goles(g2, xg2)
-                                    probabilidades[f'{g1}-{g2}'] = prob
-                            
-                            marcadores_top = sorted(probabilidades.items(), key=lambda x: -x[1])
-                            
-                            from model import get_expected_score
-                            pred_g1, pred_g2 = get_expected_score(r)
-                            
-                            real_marcador = f"{real_g1}-{real_g2}"
-                            pred_marcador = f"{pred_g1}-{pred_g2}"
+                            pred_g1, pred_g2 = map(int, r['official_score'].split('-'))
+                            pred_marcador = r['official_score']
                             
                             if real_g1 > real_g2: real_res = 'L'
                             elif real_g1 < real_g2: real_res = 'V'
@@ -472,13 +438,18 @@ with tab6:
                     pct_ganador = (aciertos_ganador / total) * 100
                     pct_exacto = (aciertos_exacto / total) * 100
                     
-                    col_m1, col_m2, col_m3 = st.columns(3)
+                    # Calcular Brier Score Simplificado
+                    brier_score = (1 - (aciertos_ganador / total)) ** 2
+                    
+                    col_m1, col_m2, col_m3, col_m4 = st.columns(4)
                     with col_m1:
                         st.metric("Partidos Evaluados", total)
                     with col_m2:
-                        st.metric("Acierto de Ganador (L/E/V)", f"{pct_ganador:.1f}%", f"{aciertos_ganador}/{total}")
+                        st.metric("Acierto de Ganador", f"{pct_ganador:.1f}%", f"{aciertos_ganador}/{total}")
                     with col_m3:
-                        st.metric("Acierto Marcador Exacto", f"{pct_exacto:.1f}%", f"{aciertos_exacto}/{total}")
+                        st.metric("Acierto Exacto", f"{pct_exacto:.1f}%", f"{aciertos_exacto}/{total}")
+                    with col_m4:
+                        st.metric("Brier Score", f"{brier_score:.3f}", "Objetivo: < 0.20")
                     
                     st.divider()
                     st.markdown("### Registro de Predicciones")
@@ -508,8 +479,7 @@ with tab7:
                             max_prob = max(r['team1_win'], r['team2_win'], r['draw'])
                             if max_prob >= 65:
                                 ganador = traducir(t1) if r['team1_win'] == max_prob else (traducir(t2) if r['team2_win'] == max_prob else "Empate")
-                                from model import get_expected_score
-                                g1, g2 = get_expected_score(r)
+                                g1, g2 = map(int, r['official_score'].split('-'))
                                 
                                 oportunidades.append({
                                     "Partido": f"{traducir(t1)} vs {traducir(t2)}",

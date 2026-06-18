@@ -4,6 +4,7 @@ from xgboost import XGBClassifier, XGBRegressor
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.model_selection import RandomizedSearchCV
+from sklearn.calibration import CalibratedClassifierCV
 from lightgbm import LGBMClassifier, LGBMRegressor
 import sqlite3
 import joblib
@@ -68,34 +69,66 @@ def get_market_value(team_name, elo):
 
 def calculate_dynamic_elo(df):
     elo_dict = {}
+    elo_off_dict = {}
+    elo_def_dict = {}
     home_elos, away_elos = [], []
+    home_off, away_off = [], []
+    home_def, away_def = [], []
     
     for idx, row in df.iterrows():
         t1, t2 = row['home_team'], row['away_team']
         elo1 = elo_dict.get(t1, 1500)
         elo2 = elo_dict.get(t2, 1500)
         
+        off1 = elo_off_dict.get(t1, 1500)
+        def1 = elo_def_dict.get(t1, 1500)
+        off2 = elo_off_dict.get(t2, 1500)
+        def2 = elo_def_dict.get(t2, 1500)
+        
         home_elos.append(elo1)
         away_elos.append(elo2)
+        home_off.append(off1)
+        home_def.append(def1)
+        away_off.append(off2)
+        away_def.append(def2)
         
         if pd.isna(row['home_score']): continue
         
         hg, ag = row['home_score'], row['away_score']
+        
+        # Win/Loss for base ELO
         w1 = 1 if hg > ag else (0.5 if hg == ag else 0)
         w2 = 1 - w1
-        
         K = 40 if row.get('tournament', '') in COMPETITIVE else 20
-        
         dr = elo1 + 50 - elo2
         we1 = 1 / (10**(-dr/400) + 1)
         we2 = 1 - we1
-        
         elo_dict[t1] = elo1 + K * (w1 - we1)
         elo_dict[t2] = elo2 + K * (w2 - we2)
         
+        # Goals for Off/Def ELO
+        # Expected goals based on Off vs Def
+        dr_off1 = off1 - def2
+        we_hg = max(0.1, 1.0 + (dr_off1 / 400.0))
+        dr_off2 = off2 - def1
+        we_ag = max(0.1, 1.0 + (dr_off2 / 400.0))
+        
+        K_goal = 20 if row.get('tournament', '') in COMPETITIVE else 10
+        
+        elo_off_dict[t1] = off1 + K_goal * (hg - we_hg)
+        elo_def_dict[t2] = def2 + K_goal * (we_hg - hg)
+        
+        elo_off_dict[t2] = off2 + K_goal * (ag - we_ag)
+        elo_def_dict[t1] = def1 + K_goal * (we_ag - ag)
+        
     df['home_elo_dyn'] = home_elos
     df['away_elo_dyn'] = away_elos
-    return df, elo_dict
+    df['home_elo_off'] = home_off
+    df['away_elo_off'] = away_off
+    df['home_elo_def'] = home_def
+    df['away_elo_def'] = away_def
+    
+    return df, elo_dict, elo_off_dict, elo_def_dict
 
 def add_streaks(df):
     """Calcula streaks mejorados y features avanzados"""
@@ -195,7 +228,8 @@ def add_h2h(df):
     df['h2h_away_wins'] = h2h_away_wins
     return df
 
-FEATURES = ['home_elo_dyn', 'away_elo_dyn', 'home_streak', 'away_streak', 'home_mv', 'away_mv', 
+FEATURES = ['home_elo_dyn', 'away_elo_dyn', 'home_elo_off', 'away_elo_off', 'home_elo_def', 'away_elo_def',
+            'home_streak', 'away_streak', 'home_mv', 'away_mv', 
             'home_gd', 'away_gd', 'h2h_home_wins', 'h2h_away_wins', 'home_americas', 'away_americas',
             'home_avg_gf', 'home_avg_ga', 'away_avg_gf', 'away_avg_ga', 'is_competitive',
             'home_shots', 'home_accuracy', 'home_conversion', 'home_pressure',
@@ -210,8 +244,10 @@ def train_model():
     df['date'] = pd.to_datetime(df['date'])
     df = df.sort_values('date')
     
-    df, elo_dict = calculate_dynamic_elo(df)
+    df, elo_dict, elo_off_dict, elo_def_dict = calculate_dynamic_elo(df)
     joblib.dump(elo_dict, "database/elo_dict.pkl")
+    joblib.dump(elo_off_dict, "database/elo_off_dict.pkl")
+    joblib.dump(elo_def_dict, "database/elo_def_dict.pkl")
     
     rankings_df = pd.DataFrame(list(elo_dict.items()), columns=['Team', 'ELO']).sort_values('ELO', ascending=False)
     conn = sqlite3.connect("database/worldcup.db")
@@ -258,30 +294,35 @@ def train_model():
               
     # ============================================================
     # ENSEMBLE: 4 CEREBROS (XGBoost + RandomForest + GradientBoosting + LightGBM)
+    # + CALIBRACIÓN ISOTÓNICA PARA MEJORAR BRIER SCORE
     # ============================================================
-    print("Entrenando Cerebro 1/4: XGBoost...")
-    xgb_rs = XGBClassifier(
+    print("Entrenando Cerebro 1/4: XGBoost (Calibrado)...")
+    xgb_base = XGBClassifier(
         random_state=42, use_label_encoder=False, eval_metric='mlogloss',
         subsample=1.0, n_estimators=200, max_depth=4, learning_rate=0.01, colsample_bytree=0.8, n_jobs=2
     )
+    xgb_rs = CalibratedClassifierCV(estimator=xgb_base, method='isotonic', cv=3)
     xgb_rs.fit(X_data, y_class, sample_weight=sample_weights)
     
-    print("Entrenando Cerebro 2/4: RandomForest...")
-    rf_rs = RandomForestClassifier(
+    print("Entrenando Cerebro 2/4: RandomForest (Calibrado)...")
+    rf_base = RandomForestClassifier(
         random_state=42, n_estimators=100, min_samples_split=2, min_samples_leaf=4, max_depth=8, n_jobs=2
     )
+    rf_rs = CalibratedClassifierCV(estimator=rf_base, method='isotonic', cv=3)
     rf_rs.fit(X_data, y_class, sample_weight=sample_weights)
     
-    print("Entrenando Cerebro 3/4: GradientBoosting...")
-    gb_rs = GradientBoostingClassifier(
+    print("Entrenando Cerebro 3/4: GradientBoosting (Calibrado)...")
+    gb_base = GradientBoostingClassifier(
         random_state=42, subsample=0.9, n_estimators=100, max_depth=3, learning_rate=0.05
     )
+    gb_rs = CalibratedClassifierCV(estimator=gb_base, method='isotonic', cv=3)
     gb_rs.fit(X_data, y_class, sample_weight=sample_weights)
     
-    print("Entrenando Cerebro 4/4: LightGBM...")
-    lgb_rs = LGBMClassifier(
+    print("Entrenando Cerebro 4/4: LightGBM (Calibrado)...")
+    lgb_base = LGBMClassifier(
         random_state=42, verbose=-1, n_estimators=150, max_depth=5, learning_rate=0.05, num_leaves=31, subsample=0.9, n_jobs=2
     )
+    lgb_rs = CalibratedClassifierCV(estimator=lgb_base, method='isotonic', cv=3)
     lgb_rs.fit(X_data, y_class, sample_weight=sample_weights)
     
     # Guardar los 4 modelos
@@ -429,8 +470,13 @@ def predict_match(team1, team2):
         ensemble = {'xgb': joblib.load("database/xgb_model.pkl")}
     
     elos = joblib.load("database/elo_dict.pkl") if os.path.exists("database/elo_dict.pkl") else {}
+    elos_off = joblib.load("database/elo_off_dict.pkl") if os.path.exists("database/elo_off_dict.pkl") else {}
+    elos_def = joblib.load("database/elo_def_dict.pkl") if os.path.exists("database/elo_def_dict.pkl") else {}
     
     elo1, elo2 = elos.get(team1, 1500), elos.get(team2, 1500)
+    elo_off1, elo_off2 = elos_off.get(team1, 1500), elos_off.get(team2, 1500)
+    elo_def1, elo_def2 = elos_def.get(team1, 1500), elos_def.get(team2, 1500)
+    
     streak1, gd1, avg_gf1, avg_ga1 = get_current_stats(team1)
     streak2, gd2, avg_gf2, avg_ga2 = get_current_stats(team2)
     h2h1, h2h2 = get_current_h2h(team1, team2)
@@ -450,7 +496,7 @@ def predict_match(team1, team2):
     streak10_1, def_cons1, off_eff1 = get_advanced_stats(team1)
     streak10_2, def_cons2, off_eff2 = get_advanced_stats(team2)
     
-    X_in = pd.DataFrame([[elo1, elo2, streak1, streak2, mv1, mv2, gd1, gd2, h2h1, h2h2, am1, am2,
+    X_in = pd.DataFrame([[elo1, elo2, elo_off1, elo_off2, elo_def1, elo_def2, streak1, streak2, mv1, mv2, gd1, gd2, h2h1, h2h2, am1, am2,
                            avg_gf1, avg_ga1, avg_gf2, avg_ga2, is_comp,
                            s1, a1, c1, p1, s2, a2, c2, p2,
                            fifa1, fifa2, elo1-elo2, mv1/(mv2+1),
@@ -471,100 +517,89 @@ def predict_match(team1, team2):
     # Goles: promediar XGB + RF + LightGBM regressors
     if os.path.exists("database/goal_ensemble.pkl"):
         ge = joblib.load("database/goal_ensemble.pkl")
-        xg1_xgb = max(0.3, float(ge['hg_xgb'].predict(X_in)[0]))
-        xg2_xgb = max(0.3, float(ge['ag_xgb'].predict(X_in)[0]))
-        xg1_rf = max(0.3, float(ge['hg_rf'].predict(X_in)[0]))
-        xg2_rf = max(0.3, float(ge['ag_rf'].predict(X_in)[0]))
-        xg1_lgb = max(0.3, float(ge.get('hg_lgb', ge['hg_xgb']).predict(X_in)[0]))
-        xg2_lgb = max(0.3, float(ge.get('ag_lgb', ge['ag_xgb']).predict(X_in)[0]))
-        xg1_raw = (xg1_xgb + xg1_rf + xg1_lgb) / 3
-        xg2_raw = (xg2_xgb + xg2_rf + xg2_lgb) / 3
+        xg1_raw = max(0.1, float(ge['hg_xgb'].predict(X_in)[0]) * 0.33 + float(ge['hg_rf'].predict(X_in)[0]) * 0.33 + float(ge.get('hg_lgb', ge['hg_xgb']).predict(X_in)[0]) * 0.34)
+        xg2_raw = max(0.1, float(ge['ag_xgb'].predict(X_in)[0]) * 0.33 + float(ge['ag_rf'].predict(X_in)[0]) * 0.33 + float(ge.get('ag_lgb', ge['ag_xgb']).predict(X_in)[0]) * 0.34)
     else:
-        hg_model = joblib.load("database/xgb_home_goals.pkl")
-        ag_model = joblib.load("database/xgb_away_goals.pkl")
-        xg1_raw = max(0.3, float(hg_model.predict(X_in)[0]))
-        xg2_raw = max(0.3, float(ag_model.predict(X_in)[0]))
+        xg1_raw, xg2_raw = 1.0, 1.0
     
-    # Calibración dinámica
-    prob_t1 = float(avg_p.get(2, 0))
-    prob_t2 = float(avg_p.get(0, 0))
+    # Calibración Dinámica de xG con ELO Ofensivo y Defensivo
+    # xG Equipo = xG Base * (ELO Ofensivo Equipo / ELO Defensivo Rival)
+    xg1_dyn = xg1_raw * (elo_off1 / elo_def2)
+    xg2_dyn = xg2_raw * (elo_off2 / elo_def1)
     
-    if prob_t1 > prob_t2:
-        dominancia = (prob_t1 - prob_t2)
-        xg1 = xg1_raw * (1.0 + dominancia * 0.7)
-        xg2 = max(0.65, xg2_raw * (1.0 - dominancia * 0.15))
-    elif prob_t2 > prob_t1:
-        dominancia = (prob_t2 - prob_t1)
-        xg2 = xg2_raw * (1.0 + dominancia * 0.7)
-        xg1 = max(0.65, xg1_raw * (1.0 - dominancia * 0.15))
-    else:
-        xg1, xg2 = xg1_raw, xg2_raw
+    # Safety cap: evita xG irreales
+    MAX_XG = 4.5
+    xg1 = min(xg1_dyn, MAX_XG)
+    xg2 = min(xg2_dyn, MAX_XG)
+    
+    # ============================================================
+    # MONTE CARLO REAL (10,000 Simulaciones Bivariate Poisson)
+    # ============================================================
+    np.random.seed(42) # para reproducibilidad en la misma sesión
+    sims = 10000
+    
+    # Covariacion (lambda3) para aumentar la probabilidad de empates (0-0, 1-1)
+    # Partidos competitivos suelen tener mayor correlacion (equipos se anulan)
+    lambda3 = 0.25 if is_comp else 0.15
+    
+    l1 = max(0.01, xg1 - lambda3)
+    l2 = max(0.01, xg2 - lambda3)
+    
+    Z = np.random.poisson(lambda3, sims)
+    X1 = np.random.poisson(l1, sims)
+    X2 = np.random.poisson(l2, sims)
+    
+    g1_sims = X1 + Z
+    g2_sims = X2 + Z
+    
+    prob_w1 = np.mean(g1_sims > g2_sims)
+    prob_d = np.mean(g1_sims == g2_sims)
+    prob_w2 = np.mean(g2_sims > g1_sims)
+    
+    over_25 = np.mean((g1_sims + g2_sims) > 2.5)
+    btts = np.mean((g1_sims > 0) & (g2_sims > 0))
+    
+    # Top 3 Scenarios directos del Monte Carlo
+    # Crear un array de marcadores "g1-g2"
+    scores = [f"{g1}-{g2}" for g1, g2 in zip(g1_sims, g2_sims)]
+    scores_series = pd.Series(scores)
+    top_scores = scores_series.value_counts(normalize=True).head(3)
+    
+    top_3_scenarios = []
+    for score, prob in top_scores.items():
+        top_3_scenarios.append((score, round(prob * 100, 2)))
+        
+    official_score = top_3_scenarios[0][0]
+    official_prob = top_3_scenarios[0][1]
     
     # Posesión esperada
     elo_diff = elo1 - elo2
     poss1 = 50.0 + (elo_diff / 30.0)
     poss1 = max(30.0, min(70.0, poss1))
     poss2 = 100.0 - poss1
-    # Safety cap: evita xG irreales que generan marcadores extremos en la UI
-    MAX_XG = 4.5
-    xg1 = min(xg1, MAX_XG)
-    xg2 = min(xg2, MAX_XG)
 
     return {
-        "team1_win": round(float(avg_p.get(2, 0) * 100), 2),
-        "draw": round(float(avg_p.get(1, 0) * 100), 2),
-        "team2_win": round(float(avg_p.get(0, 0) * 100), 2),
+        "team1_win": round(float(prob_w1 * 100), 2),
+        "draw": round(float(prob_d * 100), 2),
+        "team2_win": round(float(prob_w2 * 100), 2),
+        "over_25": round(float(over_25 * 100), 2),
+        "btts": round(float(btts * 100), 2),
         "elo1": round(float(elo1), 1), "elo2": round(float(elo2), 1),
+        "elo_off1": round(float(elo_off1), 1), "elo_off2": round(float(elo_off2), 1),
+        "elo_def1": round(float(elo_def1), 1), "elo_def2": round(float(elo_def2), 1),
         "streak1": int(streak1), "streak2": int(streak2),
         "mv1": round(float(mv1), 1), "mv2": round(float(mv2), 1),
-        "xg1": xg1, "xg2": xg2,
+        "xg1": round(float(xg1), 2), "xg2": round(float(xg2), 2),
         "poss1": round(float(poss1), 1), "poss2": round(float(poss2), 1),
         "gd1": int(gd1), "gd2": int(gd2),
         "h2h1": int(h2h1), "h2h2": int(h2h2),
         "am1": int(am1), "am2": int(am2),
         "avg_gf1": avg_gf1, "avg_ga1": avg_ga1,
-        "avg_gf2": avg_gf2, "avg_ga2": avg_ga2
+        "avg_gf2": avg_gf2, "avg_ga2": avg_ga2,
+        "official_score": official_score,
+        "official_prob": official_prob,
+        "top_3_scenarios": top_3_scenarios
     }
-
-def get_expected_score(res):
-    import math
-    xg1, xg2 = res['xg1'], res['xg2']
-    prob_t1w = res['team1_win']
-    prob_dr = res['draw']
-    prob_t2w = res['team2_win']
-    
-    g1_base = math.floor(xg1 + 0.5)
-    g2_base = math.floor(xg2 + 0.5)
-    
-    # 1. Regla dura de empates (threshold calibrado)
-    if prob_dr >= 28:
-        avg_goals = (xg1 + xg2) / 2
-        draw_goals = max(1, min(2, round(avg_goals)))
-        return draw_goals, draw_goals
-        
-    # 2. Coherencia con el ganador proyectado por el Machine Learning y xG
-    if prob_t1w > prob_t2w:
-        pred_g1 = max(1, g1_base)
-        pred_g2 = g2_base
-        if pred_g1 <= pred_g2:
-            pred_g1 = pred_g2 + 1
-        # Bono de gol para el equipo débil si su xG es decente (>0.75)
-        if xg2 >= 0.75 and pred_g2 == 0:
-            pred_g2 = 1
-        return pred_g1, pred_g2
-        
-    elif prob_t2w > prob_t1w:
-        pred_g2 = max(1, g2_base)
-        pred_g1 = g1_base
-        if pred_g2 <= pred_g1:
-            pred_g2 = pred_g1 + 1
-        if xg1 >= 0.75 and pred_g1 == 0:
-            pred_g1 = 1
-        return pred_g1, pred_g2
-        
-    else:
-        pred_g1 = max(1, g1_base)
-        return pred_g1, pred_g1
 
 if __name__ == "__main__":
     train_model()
