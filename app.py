@@ -40,9 +40,17 @@ except Exception:
     st.error("No se encontró data/matches.csv")
     st.stop()
 
+from traducciones import traducir_pais as traducir, traducir_ingles
+import unicodedata
+
+def sort_key(team_name):
+    t = traducir(team_name)
+    return unicodedata.normalize('NFKD', t).encode('ASCII', 'ignore').decode('utf-8').lower()
+
 try:
     elos = get_elos()
-    equipos_unicos = sorted(list(elos.keys()))
+    equipos_unicos = sorted(list(elos.keys()), key=sort_key)
+    equipos_espanol = [traducir(t) for t in equipos_unicos]
 except Exception as e:
     st.error(f"Error cargando el modelo: {e}. Asegúrate de ejecutar model.py primero.")
     st.stop()
@@ -50,30 +58,24 @@ except Exception as e:
 # La fuerza de ataque y defensa ahora es calculada nativamente por el modelo XGBRegressor
 # en el backend (model.py) para mayor precisión.
 
-TRADUCCIONES = {
-    "Spain": "España", "France": "Francia", "England": "Inglaterra", "Brazil": "Brasil",
-    "Germany": "Alemania", "Netherlands": "Países Bajos", "South Korea": "Corea del Sur",
-    "South Africa": "Sudáfrica", "IR Iran": "Irán", "New Zealand": "Nueva Zelanda",
-    "Saudi Arabia": "Arabia Saudita", "Morocco": "Marruecos", "Czech Republic": "Chequia",
-    "Switzerland": "Suiza", "Japan": "Japón", "Cabo Verde": "Cabo Verde", "DR Congo": "RD Congo",
-    "Congo DR": "RD Congo", "United States": "Estados Unidos", "USA": "Estados Unidos",
-    "Sweden": "Suecia", "Turkey": "Turquía", "Ivory Coast": "Costa de Marfil"
-}
-def traducir(nombre): return TRADUCCIONES.get(nombre, nombre)
+
 
 # Pestañas
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["Análisis de Partido", "Resultados en Vivo", "Rankings", "Calendario", "Simulador Monte Carlo", "Precisión", "Radar Apuestas"])
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(["Análisis de Partido", "Resultados en Vivo", "Rankings", "Calendario", "Simulador Monte Carlo", "Precisión", "Radar Apuestas", "Partidos y Cuotas (API)"])
 
 with tab1:
     col1, col2 = st.columns(2)
 
     with col1:
-        team1 = st.selectbox("Equipo Local", equipos_unicos, index=equipos_unicos.index("Argentina") if "Argentina" in equipos_unicos else 0, format_func=traducir)
+        team1_es = st.selectbox("Equipo Local", equipos_espanol, index=equipos_espanol.index(traducir("Argentina")) if traducir("Argentina") in equipos_espanol else 0)
+        team1 = traducir_ingles(team1_es)
         lesion1 = st.checkbox(f"Jugador Clave de {traducir(team1)} ausente", key="les1")
         defensivo1 = st.checkbox(f"{traducir(team1)} con planteamiento defensivo", key="def1")
+        usar_snapshot = st.checkbox("Usar Modelo Snapshot (Pre-Mundial)", key="snap", help="Activa esta casilla para predecir el partido usando el modelo congelado. Ideal para ver la predicción real antes de que la IA se 'contamine' con resultados recientes.")
 
     with col2:
-        team2 = st.selectbox("Equipo Visitante", equipos_unicos, index=equipos_unicos.index("France") if "France" in equipos_unicos else 1, format_func=traducir)
+        team2_es = st.selectbox("Equipo Visitante", equipos_espanol, index=equipos_espanol.index(traducir("France")) if traducir("France") in equipos_espanol else 1)
+        team2 = traducir_ingles(team2_es)
         lesion2 = st.checkbox(f"Jugador Clave de {traducir(team2)} ausente", key="les2")
         defensivo2 = st.checkbox(f"{traducir(team2)} con planteamiento defensivo", key="def2")
 
@@ -81,7 +83,7 @@ with tab1:
         if team1 == team2:
             st.warning("Selecciona dos equipos distintos.")
         else:
-            result = predict_match(team1, team2)
+            result = predict_match(team1, team2, use_snapshot=usar_snapshot)
             
             st.divider()
             st.subheader("Ficha Técnica del Encuentro")
@@ -247,10 +249,12 @@ with tab2:
     
     with st.form("add_match"):
         c1, c2 = st.columns(2)
-        nuevo_local = c1.selectbox("Local", equipos_unicos, key="n_local")
+        nuevo_local_es = c1.selectbox("Local", equipos_espanol, key="n_local")
+        nuevo_local = traducir_ingles(nuevo_local_es)
         goles_local = c1.number_input("Goles Local", min_value=0, max_value=20, value=0)
         
-        nuevo_visita = c2.selectbox("Visitante", equipos_unicos, key="n_visita")
+        nuevo_visita_es = c2.selectbox("Visitante", equipos_espanol, key="n_visita")
+        nuevo_visita = traducir_ingles(nuevo_visita_es)
         goles_visita = c2.number_input("Goles Visitante", min_value=0, max_value=20, value=0)
         
         submit = st.form_submit_button("Guardar Partido y Re-entrenar Modelo")
@@ -282,8 +286,9 @@ with tab2:
 
                 st.success("✅ ¡Resultado guardado! (Las estadísticas de racha y H2H se han actualizado en tiempo real).")
                 st.cache_data.clear() # Limpia la memoria para cargar los datos frescos
-                # No re-entrenamos el modelo completo aquí para evitar que se congele la aplicación por 2 minutos
-                # train_model() 
+                # Se delega el reentrenamiento a un proceso en background para no bloquear la UI
+                import subprocess
+                subprocess.Popen(["venv/bin/python", "retrain_job.py"])
                 st.rerun()
 
 with tab3:
@@ -291,6 +296,8 @@ with tab3:
     try:
         conn = sqlite3.connect("database/worldcup.db")
         df_rankings = pd.read_sql("SELECT * FROM Rankings LIMIT 20", conn)
+        if 'Team' in df_rankings.columns:
+            df_rankings['Team'] = df_rankings['Team'].apply(traducir)
         df_rankings.index = df_rankings.index + 1
         st.dataframe(df_rankings, use_container_width=True)
         conn.close()
@@ -371,6 +378,7 @@ with tab5:
 with tab6:
     st.subheader("Backtesting y Precisión (Ensemble Model)")
     st.write("Análisis de rendimiento en tiempo real de la Inteligencia Artificial frente a partidos ya finalizados. Esto valida matemáticamente la calidad del modelo (Backtesting).")
+    st.info("Evaluación Out-of-Sample — Modelo Snapshot pre-torneo, no usa datos del Mundial 2026")
     
     if st.button("Evaluar Precisión Histórica", use_container_width=True):
         with st.spinner("Evaluando predicciones del Ensemble contra resultados reales..."):
@@ -383,22 +391,15 @@ with tab6:
                 else:
                     aciertos_ganador = 0
                     aciertos_exacto = 0
+                    brier_sum = 0.0
                     resultados_html = ""
-                    
-                    from scipy.stats import nbinom
-                    def prob_goles(k, xg):
-                        if xg <= 0.1: return 1.0 if k == 0 else 0.0
-                        varianza = xg * 1.4
-                        p = xg / varianza
-                        n = (xg * p) / (1 - p)
-                        return nbinom.pmf(k, n, p)
                         
                     for _, row in df_fin.iterrows():
                         t1, t2 = row['Local'], row['Visitante']
                         real_g1, real_g2 = int(row['GolesLocal']), int(row['GolesVisitante'])
                         
                         try:
-                            r = predict_match(t1, t2)
+                            r = predict_match(t1, t2, use_snapshot=True)
                             xg1, xg2 = r['xg1'], r['xg2']
                             
                             pred_g1, pred_g2 = map(int, r['official_score'].split('-'))
@@ -416,6 +417,10 @@ with tab6:
                             
                             if es_ganador: aciertos_ganador += 1
                             if es_exacto: aciertos_exacto += 1
+                            
+                            prob_l, prob_e, prob_v = r['team1_win']/100.0, r['draw']/100.0, r['team2_win']/100.0
+                            true_l, true_e, true_v = (1.0 if real_res == 'L' else 0.0), (1.0 if real_res == 'E' else 0.0), (1.0 if real_res == 'V' else 0.0)
+                            brier_sum += (prob_l - true_l)**2 + (prob_e - true_e)**2 + (prob_v - true_v)**2
                             
                             color = "#10b981" if es_exacto else ("#3b82f6" if es_ganador else "#ef4444")
                             icon = "EXACTO" if es_exacto else ("GANADOR" if es_ganador else "FALLO")
@@ -438,8 +443,8 @@ with tab6:
                     pct_ganador = (aciertos_ganador / total) * 100
                     pct_exacto = (aciertos_exacto / total) * 100
                     
-                    # Calcular Brier Score Simplificado
-                    brier_score = (1 - (aciertos_ganador / total)) ** 2
+                    # Calcular Brier Score Multiclass
+                    brier_score = brier_sum / total
                     
                     col_m1, col_m2, col_m3, col_m4 = st.columns(4)
                     with col_m1:
@@ -449,7 +454,7 @@ with tab6:
                     with col_m3:
                         st.metric("Acierto Exacto", f"{pct_exacto:.1f}%", f"{aciertos_exacto}/{total}")
                     with col_m4:
-                        st.metric("Brier Score", f"{brier_score:.3f}", "Objetivo: < 0.20")
+                        st.metric("Brier Score", f"{brier_score:.3f}", "Objetivo: < 0.50")
                     
                     st.divider()
                     st.markdown("### Registro de Predicciones")
@@ -505,3 +510,32 @@ with tab7:
                         st.info("No se encontraron apuestas con confianza > 65% en los próximos partidos.")
             except Exception as e:
                 st.error(f"Error al analizar el calendario: {e}")
+
+with tab8:
+    st.subheader("Partidos del Día y Apuestas de Valor (Tiempo Real)")
+    st.write("Datos extraídos directamente de API-Football y The Odds API.")
+    
+    col_api1, col_api2 = st.columns(2)
+    
+    with col_api1:
+        st.markdown("#### ⚽ Partidos de Hoy")
+        try:
+            df_matches = pd.read_csv("data/todays_live_matches.csv")
+            if len(df_matches) > 0:
+                st.dataframe(df_matches, use_container_width=True)
+            else:
+                st.info("No hay partidos programados para hoy o no se ha ejecutado el script.")
+        except Exception:
+            st.info("Ejecuta 'python fetch_live_data.py' para descargar los partidos del día.")
+            
+    with col_api2:
+        st.markdown("#### 💡 Apuestas de Valor Automatizadas (IA vs Casino)")
+        try:
+            df_vb = pd.read_csv("data/value_bets_today.csv")
+            if len(df_vb) > 0:
+                st.dataframe(df_vb.style.applymap(lambda x: "background-color: #064e3b; color: #34d399;" if "+" in str(x) else ""), use_container_width=True)
+            else:
+                st.info("No hay apuestas de valor en este momento. Los momios del casino están muy precisos.")
+        except Exception:
+            st.info("Ejecuta 'python fetch_live_data.py' para cruzar tus predicciones con las cuotas.")
+
