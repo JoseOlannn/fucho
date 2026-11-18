@@ -23,51 +23,83 @@ Fecha,Grupo,Local,Visitante,Estado,GolesLocal,GolesVisitante
 17/6,Grupo L,England,Croatia,Fin,4.0,2.0
 17/6,Grupo L,Ghana,Panama,Fin,1.0,0.0
 17/6,Grupo K,Uzbekistan,Colombia,Fin,1.0,3.0
-18/6,Grupo A,Czech Republic,South Africa,Pendiente,,
-18/6,Grupo B,Switzerland,Bosnia and Herzegovina,Pendiente,,
-18/6,Grupo B,Canada,Qatar,Pendiente,,
-18/6,Grupo A,Mexico,South Korea,Pendiente,,
-19/6,Grupo D,United States,Australia,Pendiente,,
-19/6,Grupo C,Scotland,Morocco,Pendiente,,
-19/6,Grupo C,Brazil,Haiti,Pendiente,,
-19/6,Grupo D,Turkey,Paraguay,Pendiente,,
-20/6,Grupo F,Netherlands,Sweden,Pendiente,,
-20/6,Grupo E,Germany,Ivory Coast,Pendiente,,
-20/6,Grupo E,Ecuador,Curaçao,Pendiente,,
-20/6,Grupo F,Tunisia,Japan,Pendiente,,
-21/6,Grupo H,Spain,Saudi Arabia,Pendiente,,
-21/6,Grupo G,Belgium,Iran,Pendiente,,
-21/6,Grupo H,Uruguay,Cape Verde,Pendiente,,
-21/6,Grupo G,New Zealand,Egypt,Pendiente,,
-22/6,Grupo J,Argentina,Austria,Pendiente,,
-22/6,Grupo I,France,Iraq,Pendiente,,
-22/6,Grupo I,Norway,Senegal,Pendiente,,
-22/6,Grupo J,Jordan,Algeria,Pendiente,,
-23/6,Grupo K,Portugal,Uzbekistan,Pendiente,,
-23/6,Grupo L,England,Ghana,Pendiente,,
-23/6,Grupo L,Panama,Croatia,Pendiente,,
-23/6,Grupo K,Colombia,DR Congo,Pendiente,,
-24/6,Grupo B,Switzerland,Canada,Pendiente,,
-24/6,Grupo B,Bosnia and Herzegovina,Qatar,Pendiente,,
-24/6,Grupo C,Morocco,Haiti,Pendiente,,
-24/6,Grupo C,Scotland,Brazil,Pendiente,,
-24/6,Grupo A,South Africa,South Korea,Pendiente,,
-24/6,Grupo A,Czech Republic,Mexico,Pendiente,,
-25/6,Grupo E,Curaçao,Ivory Coast,Pendiente,,
-25/6,Grupo E,Ecuador,Germany,Pendiente,,
-25/6,Grupo F,Tunisia,Netherlands,Pendiente,,
-25/6,Grupo F,Japan,Sweden,Pendiente,,
-25/6,Grupo D,Turkey,United States,Pendiente,,
-25/6,Grupo D,Paraguay,Australia,Pendiente,,
-26/6,Grupo I,Norway,France,Pendiente,,
-26/6,Grupo I,Senegal,Iraq,Pendiente,,
-26/6,Grupo H,Cape Verde,Saudi Arabia,Pendiente,,
-26/6,Grupo H,Uruguay,Spain,Pendiente,,
-26/6,Grupo G,New Zealand,Belgium,Pendiente,,
-26/6,Grupo G,Egypt,Iran,Pendiente,,
-27/6,Grupo L,Panama,England,Pendiente,,
-27/6,Grupo L,Croatia,Ghana,Pendiente,,
-27/6,Grupo K,Colombia,Portugal,Pendiente,,
-27/6,Grupo K,DR Congo,Uzbekistan,Pendiente,,
-27/6,Grupo J,Algeria,Austria,Pendiente,,
-27/6,Grupo J,Jordan,Argentina,Pendiente,,
+18/6,Grupo A,Czech Republic,South Africa,Fin,1.0,1.0
+18/6,Grupo B,Switzerland,Bosnia and Herzegovina,Fin,4.0,1.0
+18/6,Grupo B,Canada,Qatar,Fin,6.0,0.0
+18/6,Grupo A,Mexico,South Korea,Fin,1.0,0.0
+19/6,Grupo D,United States,Australia,Fin,2.0,0.0
+19/6,Grupo C,Scotland,Morocco,Fin,0.0,1.0
+19/6,Grupo C,Brazil,Haiti,Fin,3.0,0.0
+19/6,Grupo D,Turkey,Paraguay,Fin,0.0,1.0
+20/6,Grupo F,Netherlands,Sweden,Fin,5.0,1.0
+20/6,Grupo E,Germany,Ivory Coast,Fin,2.0,1.0
+20/6,Grupo E,Ecuador,Curaçao,Fin,0.0,0.0
+20/6,Grupo F,Tunisia,Japan,Fin,0.0,4.0
+21/6,Grupo H,Spain,Saudi Arabia,Fin,4.0,0.0
+21/6,Grupo G,Belgium,Iran,Fin,0.0,0.0
+21/6,Grupo H,Uruguay,Cape Verde,Fin,2.0,2.0
+21/6,Grupo G,New Zealand,Egypt,Fin,1.0,3.0
+22/6,Grupo J,Argentina,Austria,Fin,2.0,0.0
+22/6,Grupo I,France,Iraq,Fin,3.0,0.0
+22/6,Grupo I,Norway,Senegal,Fin,3.0,2.0
+22/6,Grupo J,Jordan,Algeria,Fin,1.0,2.0
+23/6,Grupo K,Portugal,Uzbekistan,Fin,5.0,0.0
+23/6,Grupo L,England,Ghana,Fin,0.0,0.0
+23/6,Grupo L,Panama,Croatia,Fin,0.0,1.0
+23/6,Grupo K,Colombia,DR Congo,Fin,1.0,0.0
+24/6,Grupo B,Switzerland,Canada,Fin,2.0,1.0
+24/6,Grupo B,Bosnia and Herzegovina,Qatar,Fin,3.0,1.0
+24/6,Grupo C,Morocco,Haiti,Fin,4.0,2.0
+24/6,Grupo C,Scotland,Brazil,Fin,0.0,3.0
+24/6,Grupo A,South Africa,South Korea,Fin,1.0,0.0
+24/6,Grupo A,Czech Republic,Mexico,Fin,0.0,3.0
+25/6,Grupo E,Curaçao,Ivory Coast,Fin,0.0,2.0
+25/6,Grupo E,Ecuador,Germany,Fin,2.0,1.0
+25/6,Grupo F,Tunisia,Netherlands,Fin,1.0,3.0
+25/6,Grupo F,Japan,Sweden,Fin,1.0,1.0
+25/6,Grupo D,Turkey,United States,Fin,3.0,2.0
+25/6,Grupo D,Paraguay,Australia,Fin,0.0,0.0
+26/6,Grupo I,Norway,France,Fin,1.0,4.0
+26/6,Grupo I,Senegal,Iraq,Fin,5.0,0.0
+26/6,Grupo H,Cape Verde,Saudi Arabia,Fin,0.0,0.0
+26/6,Grupo H,Uruguay,Spain,Fin,0.0,1.0
+26/6,Grupo G,New Zealand,Belgium,Fin,1.0,5.0
+26/6,Grupo G,Egypt,Iran,Fin,1.0,1.0
+27/6,Grupo L,Panama,England,Fin,0.0,2.0
+27/6,Grupo L,Croatia,Ghana,Fin,2.0,1.0
+27/6,Grupo K,Colombia,Portugal,Fin,0.0,0.0
+27/6,Grupo K,DR Congo,Uzbekistan,Fin,3.0,1.0
+27/6,Grupo J,Algeria,Austria,Fin,3.0,3.0
+27/6,Grupo J,Jordan,Argentina,Fin,1.0,3.0
+28/6,Dieciseisavos,Canada,South Africa,Fin,1.0,0.0
+29/6,Dieciseisavos,Brazil,Japan,Fin,2.0,1.0
+29/6,Dieciseisavos,Germany,Paraguay,Fin,1.0,1.0
+29/6,Dieciseisavos,Morocco,Netherlands,Fin,1.0,1.0
+30/6,Dieciseisavos,Norway,Ivory Coast,Fin,2.0,1.0
+30/6,Dieciseisavos,France,Sweden,Fin,3.0,0.0
+30/6,Dieciseisavos,Mexico,Ecuador,Fin,2.0,0.0
+1/7,Dieciseisavos,England,DR Congo,Fin,2.0,1.0
+1/7,Dieciseisavos,Belgium,Senegal,Fin,3.0,2.0
+1/7,Dieciseisavos,United States,Bosnia and Herzegovina,Fin,2.0,0.0
+2/7,Dieciseisavos,Spain,Austria,Fin,3.0,0.0
+2/7,Dieciseisavos,Portugal,Croatia,Fin,2.0,1.0
+2/7,Dieciseisavos,Switzerland,Algeria,Fin,2.0,0.0
+3/7,Dieciseisavos,Egypt,Australia,Fin,1.0,1.0
+3/7,Dieciseisavos,Argentina,Cape Verde,Fin,3.0,2.0
+3/7,Dieciseisavos,Colombia,Ghana,Fin,1.0,0.0
+4/7,Octavos,Canada,Morocco,Fin,0.0,3.0
+4/7,Octavos,France,Paraguay,Fin,1.0,0.0
+5/7,Octavos,Brazil,Norway,Fin,1.0,2.0
+5/7,Octavos,Mexico,England,Fin,2.0,3.0
+6/7,Octavos,Portugal,Spain,Fin,0.0,1.0
+6/7,Octavos,United States,Belgium,Fin,1.0,4.0
+7/7,Octavos,Argentina,Egypt,Fin,3.0,2.0
+7/7,Octavos,Switzerland,Colombia,Fin,0.0,0.0
+9/7,Cuartos,France,Morocco,Fin,2.0,0.0
+10/7,Cuartos,Spain,Belgium,Fin,2.0,1.0
+11/7,Cuartos,England,Norway,Fin,2.0,1.0
+11/7,Cuartos,Argentina,Switzerland,Fin,3.0,1.0
+14/7,Semifinal,France,Spain,Fin,0.0,2.0
+15/7,Semifinal,England,Argentina,Fin,1.0,2.0
+18/7,Tercer Puesto,England,France,Fin,2.0,1.0
+19/7,Final,Spain,Argentina,Fin,1.0,0.0
